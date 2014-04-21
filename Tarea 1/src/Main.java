@@ -14,24 +14,27 @@ public class Main {
 	static double Mutacion;
 	static int PresupuestoMax;
 	static Map<Integer, Postulante> Postulantes;
+	static Map<Integer, Postulante> PostulantesInvalidos;
 	static Random rng;
 	
 	public static void main(String[] args) {
 		File file_postulantes = new File("postulantes.txt");
 		
 		//Valores por defecto
-		Generaciones = 10000;
-		Poblacion = 80;
-		Crossover = 0.9;
+		Generaciones = 100000;
+		Poblacion = 40;
+		Crossover = 0.5;
 		Mutacion = 0.1;
 		PresupuestoMax = 600000000;
 		
 		Postulantes = new HashMap<Integer, Postulante>();
+		PostulantesInvalidos = new HashMap<Integer, Postulante>();
 		
 		rng = new Random();
 		
 		Scanner sc;
 		try{
+			System.out.println("Leyendo datos de postulantes...");
 			sc = new Scanner(file_postulantes);
 			int indice = 1;
 			while(sc.hasNext()){
@@ -43,7 +46,8 @@ public class Main {
 				int valor = Integer.parseInt(datos[3]);
 				
 				Postulante p = new Postulante(indice, nombre, ingreso, promedio, valor);
-				Postulantes.put(indice, p);
+				if (p.getPromedio() >= 5.0 && p.getIngreso() <= 1600000)Postulantes.put(indice, p);
+				else PostulantesInvalidos.put(indice, p);
 				indice++;
 			}
 		}
@@ -51,6 +55,7 @@ public class Main {
 	
 		Map<String, String> Opciones = new HashMap<String, String>();
 		if(args.length > 0){
+			System.out.println("Leyendo archivo de opciones...");
 			File file_opciones = new File(args[0]);
 			try{
 				sc = new Scanner(file_opciones);
@@ -62,6 +67,7 @@ public class Main {
 			}
 			catch(Exception e){System.out.println("Archivo de opciones no encontrado");}
 		}
+		else {System.out.println("Archivo de opciones no entregado");}
 		
 		if (Opciones.containsKey("Generaciones")) Generaciones = Integer.parseInt(Opciones.get("Generaciones"));
 		if (Opciones.containsKey("Poblacion")) Poblacion = Integer.parseInt(Opciones.get("Poblacion"));
@@ -69,14 +75,21 @@ public class Main {
 		if (Opciones.containsKey("Mutacion")) Mutacion = Double.parseDouble(Opciones.get("Mutacion").replace(',','.'));
 		if (Opciones.containsKey("PresupuestoMax")) PresupuestoMax = Integer.parseInt(Opciones.get("PresupuestoMax").replaceAll(".", ""));
 	
+		System.out.println("INICIANDO...");
+		System.out.println("PARAMETROS USADOS");
+		System.out.println("Generaciones: " + Generaciones);
+		System.out.println("Poblacion: " + Poblacion);
+		System.out.println("Crossover: " + Crossover);
+		System.out.println("Mutacion: " + Mutacion);
+		System.out.println("Presupuesto Maximo: $" + String.format("%,d", PresupuestoMax).replace(',', '.'));
+		System.out.println("");
+		
 		HashMap<Integer, Integer> mejorCaso = null;
 		
 		HashMap<Integer, Integer>[] Generacion = new HashMap[Poblacion]; 
 		for(int i = 0; i < Poblacion; i++){
 			Generacion[i] = fixCase(getRandomCase());
-			if(esMejorCase(Generacion[i], mejorCaso)) mejorCaso = Generacion[i];
-			//if(caseValue(Generacion[i]) > caseValue(mejorCaso)) mejorCaso = Generacion[i];
-			//else if(caseValue(Generacion[i]) == caseValue(mejorCaso) && caseSecondValue(Generacion[i]) > caseSecondValue(mejorCaso)) mejorCaso = Generacion[i];
+			if(fitness(Generacion[i]) > fitness(mejorCaso)) mejorCaso = Generacion[i];
 		}
 		
 		for(int i = 1; i < Generaciones; i++){//i parte en 1 porque ya hubo una generacion
@@ -93,7 +106,7 @@ public class Main {
 				while(postulante2 == postulante1) postulante2 = rng.nextInt(Poblacion);
 				
 				int padre1 = postulante1;
-				if(esMejorCase(Generacion[postulante2], Generacion[postulante1])) padre1 = postulante2;
+				if(fitness(Generacion[postulante2]) > fitness(Generacion[postulante1]))padre1 = postulante2;
 				
 				int padre2 = padre1;
 				while(padre2 == padre1){
@@ -101,7 +114,7 @@ public class Main {
 					postulante2 = rng.nextInt(Poblacion);
 					while(postulante2 == postulante1) postulante2 = rng.nextInt(Poblacion);
 					padre2 = postulante1;
-					if(esMejorCase(Generacion[postulante2], Generacion[postulante1])) padre2 = postulante2;
+					if(fitness(Generacion[postulante2]) > fitness(Generacion[postulante1]))padre2 = postulante2;
 				}
 				
 				HashMap<Integer, Integer> Hijo1 = new HashMap<Integer, Integer>(Postulantes.size());
@@ -132,13 +145,14 @@ public class Main {
 				while(postulante2 == postulante1) postulante2 = rng.nextInt(Poblacion);
 				
 				int padre = postulante1;
-				if(esMejorCase(Generacion[postulante2], Generacion[postulante1])) padre = postulante2;
+				if(fitness(Generacion[postulante2]) > fitness(Generacion[postulante1]))padre = postulante2;
 				
 				HashMap<Integer, Integer> Mutante = new HashMap<Integer, Integer>(Postulantes.size());
 				
 				for(int k : Generacion[padre].keySet()){
 					if(rng.nextDouble() < Mutacion){//Entonces se muta por un valor al azar
-						Mutante.put(k, rng.nextInt(3));
+						if(Postulantes.get(k).getIngreso() > 1000000) Mutante.put(k, (Generacion[padre].get(k) + 1) % 2);
+						else Mutante.put(k, rng.nextInt(3));
 					}
 					else{//Se pone el valor original
 						Mutante.put(k, Generacion[padre].get(k));
@@ -155,13 +169,15 @@ public class Main {
 			
 			//Se actualiza el mejor caso
 			for(int j = 0; j < Poblacion; j++){
-				if(esMejorCase(Generacion[j], mejorCaso)) mejorCaso = Generacion[j];
+				if(fitness(Generacion[j]) > fitness(mejorCaso))mejorCaso = Generacion[j];
+				//if(esMejorCase(Generacion[j], mejorCaso)) mejorCaso = Generacion[j];
 			}
 		}
 		
-		
 		System.out.println("ASIGNACION OPTIMA");
-		for(int k : mejorCaso.keySet()){
+		//for(int k : mejorCaso.keySet()){
+		for(int k = 1; k <= Postulantes.size() + PostulantesInvalidos.size(); k++){
+			if(!mejorCaso.containsKey(k)) mejorCaso.put(k, 0);
 			String linea = "Postulante " + k + ", ";
 			if (mejorCaso.get(k) == 0) linea += "Nada";
 			else if(mejorCaso.get(k) == 1) linea += "Media";
@@ -175,9 +191,7 @@ public class Main {
 	static HashMap<Integer, Integer> getRandomCase(){
 		HashMap<Integer, Integer> Caso = new HashMap<Integer, Integer>(Postulantes.size());
 		for(int k : Postulantes.keySet()){
-			//if(Postulantes.get(k).getPromedio() >= 5.0){
-				Caso.put(k, rng.nextInt(3));
-			//}
+			Caso.put(k, rng.nextInt(3));
 		}
 		return Caso;
 	}
@@ -192,8 +206,9 @@ public class Main {
 			}
 		}
 		//Revisamos que el caso no se pase del costo
+		
 		while(getCaseCost(Case) > PresupuestoMax){
-			//Busco el mas caro de los becados totales y parciales
+			//Busco el con la nota mas baja de los becados totales y parciales
 			
 			boolean FoundCompleto = false;
 			int maxCompleto = 1;
@@ -201,11 +216,11 @@ public class Main {
 			int maxParcial = 1;
 			
 			for(int k : Case.keySet()){
-				if(Case.get(k) == 2 && (!FoundCompleto || Postulantes.get(maxCompleto).getValor() < Postulantes.get(k).getValor())){
+				if(Case.get(k) == 2 && (!FoundCompleto || Postulantes.get(maxCompleto).getPromedio() > Postulantes.get(k).getPromedio())){
 					FoundCompleto = true;
 					maxCompleto = k;
 				}
-				else if(Case.get(k) == 1 && (!FoundParcial || Postulantes.get(maxParcial).getValor() < Postulantes.get(k).getValor())){
+				else if(Case.get(k) == 1 && (!FoundParcial || Postulantes.get(maxParcial).getPromedio() > Postulantes.get(k).getPromedio())){
 					FoundParcial = true;
 					maxParcial = k;
 				}
@@ -219,6 +234,7 @@ public class Main {
 			else break;
 			
 		}
+		
 		return Case;
 	}
 	
@@ -233,43 +249,20 @@ public class Main {
 		return costo;
 	}
 
-	static int caseValue(HashMap<Integer, Integer> Case){
-		if (Case == null) return 0;
+	static double fitness(HashMap<Integer, Integer> Case){
+		if(Case == null) return 0.0;
 		
-		int value = 0;
-		for(int i : Case.keySet()){
-			if(Case.get(i) > 0) value++;
+		double fitness = 0.0;
+		
+		for(int k : Case.keySet()){
+			Postulante p = Postulantes.get(k);
+			int beca = Case.get(k);
+			fitness += p.getPromedio() * (double)(beca * p.getValor()) / (double)(2 * p.getIngreso());
 		}
 		
-		return value;
+		fitness = (fitness * (double) getCaseCost(Case)) / (double) PresupuestoMax;
+		
+		return fitness;
 	}
 	
-	static int caseSecondValue(HashMap<Integer, Integer> Case){
-		if (Case == null) return 0;
-		
-		int value = 0;
-		for(int i : Case.keySet()){
-			if(Case.get(i) == 2) value++;
-		}
-		
-		return value;
-	}
-
-	static boolean esMejorCase(HashMap<Integer, Integer> Case1, HashMap<Integer, Integer> Case2){
-		if(caseValue(Case1) > caseValue(Case2)) return true;
-		if(caseSecondValue(Case1) > caseSecondValue(Case2)) return true;
-		
-		//Si los dos tienen la misma cantidad de becas y de becas completas entonces es mejor en el que las mejores becas las tengan los mejores promedios
-		double gradesValue1 = 0.0;
-		double gradesValue2 = 0.0;
-		
-		for(int k : Case1.keySet()){
-			//Las becas medias suman la mitad del ptomedio, las completas el puntaje entero y los sin nada.
-			gradesValue1 += (Postulantes.get(k).getPromedio() * Case1.get(k))/2;
-			gradesValue2 += (Postulantes.get(k).getPromedio() * Case2.get(k))/2;
-		}
-		
-		return gradesValue1 > gradesValue2;
-	}
-
 }
