@@ -21,8 +21,8 @@ public class Main {
 		
 		//Valores por defecto
 		Generaciones = 10000;
-		Poblacion = 40;
-		Crossover = 0.5;
+		Poblacion = 80;
+		Crossover = 0.9;
 		Mutacion = 0.1;
 		PresupuestoMax = 600000000;
 		
@@ -74,8 +74,89 @@ public class Main {
 		HashMap<Integer, Integer>[] Generacion = new HashMap[Poblacion]; 
 		for(int i = 0; i < Poblacion; i++){
 			Generacion[i] = fixCase(getRandomCase());
-			if(caseValue(Generacion[i]) > caseValue(mejorCaso)) mejorCaso = Generacion[i];
-			else if(caseValue(Generacion[i]) == caseValue(mejorCaso) && caseSecondValue(Generacion[i]) > caseSecondValue(mejorCaso)) mejorCaso = Generacion[i];
+			if(esMejorCase(Generacion[i], mejorCaso)) mejorCaso = Generacion[i];
+			//if(caseValue(Generacion[i]) > caseValue(mejorCaso)) mejorCaso = Generacion[i];
+			//else if(caseValue(Generacion[i]) == caseValue(mejorCaso) && caseSecondValue(Generacion[i]) > caseSecondValue(mejorCaso)) mejorCaso = Generacion[i];
+		}
+		
+		for(int i = 1; i < Generaciones; i++){//i parte en 1 porque ya hubo una generacion
+			HashMap<Integer, Integer>[] Hijos = new HashMap[Poblacion];
+			
+			int hijosCrossover = (int)(Crossover * Poblacion);
+			
+			//Hijos generados por crossover
+			int agregados = 0;
+			while(agregados < hijosCrossover){
+				//Estrategia de torneo para elegir los dos padres:
+				int postulante1 = rng.nextInt(Poblacion);
+				int postulante2 = rng.nextInt(Poblacion);
+				while(postulante2 == postulante1) postulante2 = rng.nextInt(Poblacion);
+				
+				int padre1 = postulante1;
+				if(esMejorCase(Generacion[postulante2], Generacion[postulante1])) padre1 = postulante2;
+				
+				int padre2 = padre1;
+				while(padre2 == padre1){
+					postulante1 = rng.nextInt(Poblacion);
+					postulante2 = rng.nextInt(Poblacion);
+					while(postulante2 == postulante1) postulante2 = rng.nextInt(Poblacion);
+					padre2 = postulante1;
+					if(esMejorCase(Generacion[postulante2], Generacion[postulante1])) padre2 = postulante2;
+				}
+				
+				HashMap<Integer, Integer> Hijo1 = new HashMap<Integer, Integer>(Postulantes.size());
+				HashMap<Integer, Integer> Hijo2 = new HashMap<Integer, Integer>(Postulantes.size());
+				
+				int indiceCambio = 1 + rng.nextInt(Postulantes.size() - 1);
+				
+				for(int k : Postulantes.keySet()){
+					if(k <= indiceCambio){
+						Hijo1.put(k, Generacion[padre1].get(k));
+						Hijo2.put(k, Generacion[padre2].get(k));
+					}
+					else{
+						Hijo1.put(k, Generacion[padre2].get(k));
+						Hijo2.put(k, Generacion[padre1].get(k));
+					}
+				}
+				
+				Hijos[agregados] = fixCase(Hijo1);
+				agregados++;
+				Hijos[agregados] = fixCase(Hijo2);
+				agregados++;
+			}
+			//Hijos generados por mutacion
+			while(agregados < Poblacion){
+				int postulante1 = rng.nextInt(Poblacion);
+				int postulante2 = rng.nextInt(Poblacion);
+				while(postulante2 == postulante1) postulante2 = rng.nextInt(Poblacion);
+				
+				int padre = postulante1;
+				if(esMejorCase(Generacion[postulante2], Generacion[postulante1])) padre = postulante2;
+				
+				HashMap<Integer, Integer> Mutante = new HashMap<Integer, Integer>(Postulantes.size());
+				
+				for(int k : Generacion[padre].keySet()){
+					if(rng.nextDouble() < Mutacion){//Entonces se muta por un valor al azar
+						Mutante.put(k, rng.nextInt(3));
+					}
+					else{//Se pone el valor original
+						Mutante.put(k, Generacion[padre].get(k));
+					}
+				}
+				
+				//Se agrega el mutante a los hijos
+				Hijos[agregados] = fixCase(Mutante);
+				agregados++;
+			}
+			
+			//Se actualiza la generacion
+			Generacion = Hijos;
+			
+			//Se actualiza el mejor caso
+			for(int j = 0; j < Poblacion; j++){
+				if(esMejorCase(Generacion[j], mejorCaso)) mejorCaso = Generacion[j];
+			}
 		}
 		
 		
@@ -94,17 +175,21 @@ public class Main {
 	static HashMap<Integer, Integer> getRandomCase(){
 		HashMap<Integer, Integer> Caso = new HashMap<Integer, Integer>(Postulantes.size());
 		for(int k : Postulantes.keySet()){
-			Caso.put(k, rng.nextInt(3));
+			//if(Postulantes.get(k).getPromedio() >= 5.0){
+				Caso.put(k, rng.nextInt(3));
+			//}
 		}
 		return Caso;
 	}
 	
 	static HashMap<Integer, Integer> fixCase(HashMap<Integer,Integer> Case){
 		for(int k : Postulantes.keySet()){
-			//Le quitamos la beca a quienes tengan promedio bajo 5 y que reciban ingresos sobre 1.600.000
-			if(Postulantes.get(k).getPromedio() < 5.0 || Postulantes.get(k).getIngreso() > 1600000) Case.put(k, 0);
-			//Quienes hallan recibido beca completa y tengan ingresos sobre 1.000.000 se cambian a beca parcial
-			if(Case.get(k) == 2 && Postulantes.get(k).getIngreso() > 1000000)Case.put(k,1);
+			if(Case.containsKey(k)){
+				//Le quitamos la beca a quienes tengan promedio bajo 5 y que reciban ingresos sobre 1.600.000
+				if(Postulantes.get(k).getPromedio() < 5.0 || Postulantes.get(k).getIngreso() > 1600000) Case.put(k, 0);
+				//Quienes hallan recibido beca completa y tengan ingresos sobre 1.000.000 se cambian a beca parcial
+				if(Case.get(k) == 2 && Postulantes.get(k).getIngreso() > 1000000)Case.put(k,1);
+			}
 		}
 		//Revisamos que el caso no se pase del costo
 		while(getCaseCost(Case) > PresupuestoMax){
@@ -169,4 +254,22 @@ public class Main {
 		
 		return value;
 	}
+
+	static boolean esMejorCase(HashMap<Integer, Integer> Case1, HashMap<Integer, Integer> Case2){
+		if(caseValue(Case1) > caseValue(Case2)) return true;
+		if(caseSecondValue(Case1) > caseSecondValue(Case2)) return true;
+		
+		//Si los dos tienen la misma cantidad de becas y de becas completas entonces es mejor en el que las mejores becas las tengan los mejores promedios
+		double gradesValue1 = 0.0;
+		double gradesValue2 = 0.0;
+		
+		for(int k : Case1.keySet()){
+			//Las becas medias suman la mitad del ptomedio, las completas el puntaje entero y los sin nada.
+			gradesValue1 += (Postulantes.get(k).getPromedio() * Case1.get(k))/2;
+			gradesValue2 += (Postulantes.get(k).getPromedio() * Case2.get(k))/2;
+		}
+		
+		return gradesValue1 > gradesValue2;
+	}
+
 }
